@@ -101,7 +101,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
 if __name__ == "__main__":
     # Load configuration and preprocess data
     config = load_config()
-    train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state = preprocess_data(config)
+    train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, node_to_state = preprocess_data(config)
 
     # Move tensors to device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

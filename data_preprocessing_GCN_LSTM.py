@@ -41,25 +41,6 @@ def load_config():
         'output_dir': os.path.join(script_dir, 'outputs/GCN_LSTM_Plots')
     }
 
-
-def save_processed_data(output_dir, **data):
-    """Save processed data to files."""
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Save tensors
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            file_path = os.path.join(output_dir, f"{key}.pt")
-            torch.save(value, file_path)
-            print(f"Saved {key} to {file_path}")
-        elif isinstance(value, RobustScaler):
-            file_path = os.path.join(output_dir, f"{key}.pkl")
-            with open(file_path, 'wb') as f:
-                import pickle
-                pickle.dump(value, f)
-            print(f"Saved {key} to {file_path}")
-
-
 def load_and_prepare_data(config):
     """Load and prepare datasets."""
     dynamic_data = pd.read_csv(config['dynamic_data_path'])
@@ -181,34 +162,6 @@ def create_sequences(data, sequence_length, features_to_scale, node_mapping):
 
     return sequences_tensor, targets_tensor, nodes_tensor
 
-def visualize_graph(G, output_dir):
-    """Visualize and save the graph."""
-    os.makedirs(output_dir, exist_ok=True)
-
-    plt.figure(figsize=(10, 8))
-    pos = {node: (data.get('x', 0), data.get('y', 0)) for node, data in G.nodes(data=True)}
-    labels = {node: node for node in G.nodes()}
-    nx.draw(
-        G,
-        pos,
-        with_labels=True,
-        labels=labels,
-        node_color='skyblue',
-        node_size=500,
-        edge_color='k',
-        linewidths=1,
-        font_size=15,
-        arrows=True,
-    )
-    plt.title("Directed Network Graph of States and Grid Lines")
-
-    graph_path = os.path.join(output_dir, "network_graph.png")
-    print(f"Saving graph to {graph_path}")
-    plt.savefig(graph_path, format='png', dpi=300)
-    assert os.path.isfile(graph_path), f"Graph not saved at {graph_path}"
-    plt.close()
-    print(f"Graph successfully saved to {graph_path}")
-
 
 
 # Main preprocessing function
@@ -231,8 +184,8 @@ def preprocess_data(config):
     'weekofyear', 'quarter', 'is_holiday', 'season', 'state_id',
     'total_plant_capacity', 'population', 'GDP']  # Add your features list here 'population', 'GDP', 'year'
     
-    feature_scaler = scale_features(train_data, val_data, test_data, features_to_scale)
-    target_scaler = scale_targets(train_data, val_data, test_data)
+    scale_features(train_data, val_data, test_data, features_to_scale)
+    scale_targets(train_data, val_data, test_data)
 
     G = create_graph(dynamic_data, static_data, grid_df)
     node_mapping = {node: idx for idx, node in enumerate(sorted(G.nodes))}
@@ -243,26 +196,5 @@ def preprocess_data(config):
     val_seq, val_tgt, val_nodes = create_sequences(val_data, config['sequence_length'], features_to_scale, node_mapping)
     test_seq, test_tgt, test_nodes = create_sequences(test_data, config['sequence_length'], features_to_scale, node_mapping)
 
-    # Visualize and save the graph
-    visualize_graph(G, config['output_dir'])
-
-    # Save processed outputs
-    save_processed_data(
-        config['output_dir'],
-        train_seq=train_seq,
-        train_tgt=train_tgt,
-        train_nodes=train_nodes,
-        val_seq=val_seq,
-        val_tgt=val_tgt,
-        val_nodes=val_nodes,
-        test_seq=test_seq,
-        test_tgt=test_tgt,
-        test_nodes=test_nodes,
-        node_features_tensor=node_features_tensor,
-        edge_index_tensor=edge_index_tensor,
-        edge_attr_tensor=edge_attr_tensor,
-        target_scaler=target_scaler
-    )
-
-    return train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state
+    return train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, node_to_state
 

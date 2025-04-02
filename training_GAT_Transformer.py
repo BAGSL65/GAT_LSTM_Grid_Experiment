@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib.pyplot as plt
-from lstm_model import LSTM
-from data_preprocessing_LSTM import preprocess_data, load_config
+from GAT_Transformer_model import GAT_Transformer
+from data_preprocessing_GAT_Transformer import preprocess_data, load_config
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 # 设置随机种子
@@ -22,7 +22,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
     trigger_times = 0
 
     os.makedirs(output_dir, exist_ok=True)
-    model_save_path = os.path.join(output_dir, "lstm_model.pth")
+    model_save_path = os.path.join(output_dir, "gat_transformer_model.pth")
     training_log_path = os.path.join(output_dir, "training_log.txt")
 
     # Open a log file to write training progress
@@ -32,10 +32,11 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
         for epoch in range(num_epochs):
             model.train()
             train_loss = 0
-            for sequences, targets in train_loader:
-                sequences, targets = sequences.to(device), targets.to(device)
+            for sequences, targets, nodes in train_loader:
+                sequences, targets, nodes = sequences.to(device), targets.to(device), nodes.to(device)
                 optimizer.zero_grad()
-                output = model(sequences)
+                # node_features = node_features_tensor[nodes]
+                output = model(sequences, edge_index_tensor, edge_attr_tensor, node_features_tensor, nodes)
                 loss = criterion(output, targets)
                 loss.backward()
                 optimizer.step()
@@ -47,9 +48,10 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
             model.eval()
             val_loss = 0
             with torch.no_grad():
-                for sequences, targets in val_loader:
-                    sequences, targets = sequences.to(device), targets.to(device)
-                    output = model(sequences)
+                for sequences, targets, nodes in val_loader:
+                    sequences, targets, nodes = sequences.to(device), targets.to(device), nodes.to(device)
+                    # node_features = node_features_tensor[nodes]
+                    output = model(sequences, edge_index_tensor, edge_attr_tensor, node_features_tensor, nodes)
                     loss = criterion(output, targets)
                     val_loss += loss.item()
                     
@@ -85,7 +87,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
     plt.plot(val_losses, label='Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('LSTM Training and Validation Loss')
+    plt.title('GAT-Transformer Training and Validation Loss')
     plt.legend()
     plt.grid()
     loss_curve_path = os.path.join(output_dir, "loss_curve.png")
@@ -99,28 +101,37 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
 if __name__ == "__main__":
     # Load configuration and preprocess data
     config = load_config()
-    train_seq, train_tgt, val_seq, val_tgt,  test_seq, test_tgt, target_scaler = preprocess_data(config)
+    train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state = preprocess_data(config)
 
     # Move tensors to device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_seq, train_tgt= train_seq.to(device), train_tgt.to(device)
-    val_seq, val_tgt= val_seq.to(device), val_tgt.to(device)
+    node_features_tensor = node_features_tensor.to(device)
+    edge_index_tensor = edge_index_tensor.to(device)
+    edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
     batch_size = 27
-    train_dataset = TensorDataset(train_seq, train_tgt)
-    val_dataset = TensorDataset(val_seq, val_tgt)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_dataset = TensorDataset(train_seq, train_tgt, train_nodes)
+    val_dataset = TensorDataset(val_seq, val_tgt, val_nodes)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,# 启用快速GPU传输
+                              persistent_workers=True  # 保持worker存活
+                              )
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,# 启用快速GPU传输
+                            persistent_workers=True  # 保持worker存活
+                            )
 
     # Model parameters
     sequence_feature_dim = train_seq.shape[2]
+    node_feature_dim = node_features_tensor.shape[1]
+    gat_out_channels = 64
+    gat_heads = 8
     lstm_hidden_dim = 128
     lstm_layers = 4
+    edge_dim = edge_attr_tensor.shape[1]
 
     # Initialize model
-    model = LSTM(sequence_feature_dim, lstm_hidden_dim,lstm_layers).to(device)
+    model = GAT_Transformer(node_feature_dim, sequence_feature_dim, config['sequence_length'], gat_out_channels, gat_heads, edge_dim).to(device)
 
     # Define optimizer, scheduler, and loss function
     optimizer = Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
@@ -140,8 +151,8 @@ if __name__ == "__main__":
         patience=10,
         output_dir=output_dir
     )
-    save_train_losses_path = os.path.join(output_dir, "LSTM_train_losses.pkl")
-    save_val_losses_path = os.path.join(output_dir, "LSTM_val_losses.pkl")
+    save_train_losses_path = os.path.join(output_dir, "GAT_Transformer_train_losses.pkl")
+    save_val_losses_path = os.path.join(output_dir, "GAT_Transformer_val_losses.pkl")
     import pickle
     # 保存到文件
 

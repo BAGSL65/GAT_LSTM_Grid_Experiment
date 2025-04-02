@@ -41,25 +41,6 @@ def load_config():
         'output_dir': os.path.join(script_dir, 'outputs/Transformer_Plots')
     }
 
-
-def save_processed_data(output_dir, **data):
-    """Save processed data to files."""
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Save tensors
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            file_path = os.path.join(output_dir, f"{key}.pt")
-            torch.save(value, file_path)
-            print(f"Saved {key} to {file_path}")
-        elif isinstance(value, RobustScaler):
-            file_path = os.path.join(output_dir, f"{key}.pkl")
-            with open(file_path, 'wb') as f:
-                import pickle
-                pickle.dump(value, f)
-            print(f"Saved {key} to {file_path}")
-
-
 def load_and_prepare_data(config):
     """Load and prepare datasets."""
     dynamic_data = pd.read_csv(config['dynamic_data_path'])
@@ -152,21 +133,6 @@ def preprocess_data(config):
     train_seq, train_tgt, train_nodes = create_sequences(train_data, config['sequence_length'], features_to_scale)
     val_seq, val_tgt, val_nodes = create_sequences(val_data, config['sequence_length'], features_to_scale)
     test_seq, test_tgt, test_nodes = create_sequences(test_data, config['sequence_length'], features_to_scale)
-
-    # Save processed outputs
-    save_processed_data(
-        config['output_dir'],
-        train_seq=train_seq,
-        train_tgt=train_tgt,
-        train_nodes=train_nodes,
-        val_seq=val_seq,
-        val_tgt=val_tgt,
-        val_nodes=val_nodes,
-        test_seq=test_seq,
-        test_tgt=test_tgt,
-        test_nodes=test_nodes,
-        target_scaler=target_scaler
-    )
 
     return train_seq, train_tgt, val_seq, val_tgt, test_seq, test_tgt, target_scaler
 

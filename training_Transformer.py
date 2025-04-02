@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import matplotlib.pyplot as plt
 from transformer_model import TimeSeriesTransformer
 from data_preprocessing_Transformer import preprocess_data, load_config
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 # 设置随机种子
@@ -15,7 +16,10 @@ torch.manual_seed(seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion, num_epochs=10, patience=10, output_dir="outputs"):
+
+
+def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion, num_epochs=10, patience=10,
+                output_dir="outputs"):
     """Train the model and save the results."""
     train_losses, val_losses = [], []
     best_val_loss = float('inf')
@@ -40,10 +44,10 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
-            
+
             train_loss /= len(train_loader)
             train_losses.append(train_loss)
-            
+
             model.eval()
             val_loss = 0
             with torch.no_grad():
@@ -53,16 +57,15 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
                     output = model(sequences)
                     loss = criterion(output, targets)
                     val_loss += loss.item()
-                    
+
             val_loss /= len(val_loader)
             val_losses.append(val_loss)
 
-
             # Log results for this epoch
-            log_msg = (f"Epoch {epoch+1}, Train Loss: {train_loss}, Validation Loss: {val_loss}")
+            log_msg = (f"Epoch {epoch + 1}, Train Loss: {train_loss}, Validation Loss: {val_loss}")
             logging.info(log_msg)
-            log_file.write(f"{epoch+1},{train_loss},{val_loss}\n")
-            
+            log_file.write(f"{epoch + 1},{train_loss},{val_loss}\n")
+
             # Adjust learning rate
             scheduler.step(val_loss)
             current_lr = scheduler.get_last_lr()
@@ -96,6 +99,7 @@ def train_model(model, train_loader, val_loader, optimizer, scheduler, criterion
 
     return train_losses, val_losses
 
+
 # Main function to run training
 if __name__ == "__main__":
     # Load configuration and preprocess data
@@ -105,22 +109,25 @@ if __name__ == "__main__":
     # Move tensors to device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_seq, train_tgt = train_seq.to(device), train_tgt.to(device)
-    val_seq, val_tgt = val_seq.to(device), val_tgt.to(device)
-
     # Prepare DataLoader
     batch_size = 27
     train_dataset = TensorDataset(train_seq, train_tgt)
     val_dataset = TensorDataset(val_seq, val_tgt)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
+                              # 启用快速GPU传输
+                              persistent_workers=True  # 保持worker存活
+                              )
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
+                            # 启用快速GPU传输
+                            persistent_workers=True  # 保持worker存活
+                            )
 
     # Model parameters
     sequence_feature_dim = train_seq.shape[2]
     output_dim = 1
 
     # Initialize model
-    model = TimeSeriesTransformer(sequence_feature_dim, output_dim).to(device)
+    model = TimeSeriesTransformer(sequence_feature_dim, config['sequence_length']).to(device)
 
     # Define optimizer, scheduler, and loss function
     optimizer = Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
@@ -143,6 +150,7 @@ if __name__ == "__main__":
     save_train_losses_path = os.path.join(output_dir, "Transformer_train_losses.pkl")
     save_val_losses_path = os.path.join(output_dir, "Transformer_val_losses.pkl")
     import pickle
+
     # 保存到文件
 
     with open(save_train_losses_path, 'wb') as f:

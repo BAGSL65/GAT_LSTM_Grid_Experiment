@@ -4,8 +4,10 @@ import pandas as pd
 import numpy as np
 import random
 import torch
+import networkx as nx
 from sklearn.preprocessing import RobustScaler
-
+from torch_geometric.data import Data
+import matplotlib.pyplot as plt
 # 设置随机种子
 seed = 65
 random.seed(seed)
@@ -36,26 +38,8 @@ def load_config():
         'val_start_date': '2020-01-01',
         'val_end_date': '2020-06-30',
         'test_start_date': '2020-07-01',
-        'output_dir': os.path.join(script_dir, 'outputs/LSTM_Plots')
+        'output_dir': os.path.join(script_dir, 'outputs/GAT_Transformer_Plots')
     }
-
-
-def save_processed_data(output_dir, **data):
-    """Save processed data to files."""
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Save tensors
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            file_path = os.path.join(output_dir, f"{key}.pt")
-            torch.save(value, file_path)
-            print(f"Saved {key} to {file_path}")
-        elif isinstance(value, RobustScaler):
-            file_path = os.path.join(output_dir, f"{key}.pkl")
-            with open(file_path, 'wb') as f:
-                import pickle
-                pickle.dump(value, f)
-            print(f"Saved {key} to {file_path}")
 
 
 def load_and_prepare_data(config):
@@ -83,6 +67,7 @@ def split_data(dynamic_data, config):
         data['time_index'] = data['time_index'].astype(int)
 
     return train_data, val_data, test_data
+
 def scale_features(train_data, val_data, test_data, features_to_scale):
     """Scale features using RobustScaler."""
     feature_scaler = RobustScaler()
@@ -90,6 +75,7 @@ def scale_features(train_data, val_data, test_data, features_to_scale):
     val_data[features_to_scale] = feature_scaler.transform(val_data[features_to_scale])
     test_data[features_to_scale] = feature_scaler.transform(test_data[features_to_scale])
     return feature_scaler
+
 def scale_targets(train_data, val_data, test_data):
     """Scale target consumption using RobustScaler."""
     target_scaler = RobustScaler()
@@ -98,7 +84,61 @@ def scale_targets(train_data, val_data, test_data):
     test_data['target_consumption'] = target_scaler.transform(test_data[['target_consumption']])
     return target_scaler
 
-def create_sequences(data, sequence_length, features_to_scale):
+def create_graph(dynamic_data, static_data, grid_df):
+    """Create directed graph using NetworkX."""
+    G = nx.DiGraph()
+
+    # Add states as nodes with attributes from static_data
+    for index, row in static_data.iterrows():
+        G.add_node(row['state'], **row.to_dict())
+
+    # Add time series data to each node6
+    for state, group in dynamic_data.groupby('state'):
+        G.nodes[state]['time_series'] = group.to_dict(orient='records')
+
+    # Add edges with attributes from grid_df
+    for index, row in grid_df.iterrows():
+        G.add_edge(row['Source'], row['Target'], **row.to_dict())
+
+    return G
+
+def extract_graph_features(G, node_mapping):
+    """Extract and scale node and edge features."""
+    # Extract node features
+    node_features_list = []
+    for node, data in G.nodes(data=True):
+        features = [data.get(feature) for feature in ['x', 'y', 'pv_pot', 'onw_pot', 'ofw_pot']]
+        node_features_list.append(features)
+
+    node_features_df = pd.DataFrame(node_features_list, columns=['x', 'y', 'pv_pot', 'onw_pot', 'ofw_pot'])
+
+    # Normalize node features
+    scaler = RobustScaler()
+    normalized_node_features = scaler.fit_transform(node_features_df)
+
+    node_features_tensor = torch.tensor(normalized_node_features, dtype=torch.float)
+
+    # Extract edge index and edge attributes
+    edge_index_list = []
+    edge_attr_list = []
+    for source, target, data in G.edges(data=True):
+        edge_index_list.append([node_mapping[source], node_mapping[target]])
+        edge_attr = [data.get(attr) for attr in ['capacity', 'line_eff', 'line_len', 'line_carrier']]
+        edge_attr_list.append(edge_attr)
+
+    edge_attr_df = pd.DataFrame(edge_attr_list, columns=['capacity', 'line_eff', 'line_len', 'line_carrier'])
+
+    # Normalize edge attributes
+    edge_scaler = RobustScaler()
+    scaled_edge_attrs = edge_scaler.fit_transform(edge_attr_df)
+    edge_attr_tensor = torch.tensor(scaled_edge_attrs, dtype=torch.float)
+
+    # Convert edge index to tensor
+    edge_index_tensor = torch.tensor(edge_index_list, dtype=torch.long).t().contiguous()
+
+    return node_features_tensor, edge_index_tensor, edge_attr_tensor
+
+def create_sequences(data, sequence_length, features_to_scale, node_mapping):
     """Create input sequences, targets, and node indices."""
     sequences, targets, nodes = [], [], []
     grouped = data.groupby('state')
@@ -107,6 +147,7 @@ def create_sequences(data, sequence_length, features_to_scale):
         group = group.sort_values(by='datetime')
         values = group[features_to_scale].values
         target_values = group['target_consumption'].values
+        state_idx = node_mapping[state]
 
         if len(group) >= sequence_length + 1:
             for i in range(len(group) - sequence_length):
@@ -114,12 +155,13 @@ def create_sequences(data, sequence_length, features_to_scale):
                 tgt = target_values[i + sequence_length]
                 sequences.append(seq)
                 targets.append(tgt)
+                nodes.append(state_idx)
 
     sequences_tensor = torch.tensor(np.array(sequences), dtype=torch.float)
     targets_tensor = torch.tensor(np.array(targets), dtype=torch.float).unsqueeze(-1)
+    nodes_tensor = torch.tensor(np.array(nodes), dtype=torch.long)
 
-    return sequences_tensor, targets_tensor
-
+    return sequences_tensor, targets_tensor, nodes_tensor
 
 
 # Main preprocessing function
@@ -141,25 +183,17 @@ def preprocess_data(config):
     'WIND SPEED (m/s)(std)','year', 'month', 'day', 'hour', 'dayofweek',
     'weekofyear', 'quarter', 'is_holiday', 'season', 'state_id',
     'total_plant_capacity', 'population', 'GDP']  # Add your features list here 'population', 'GDP', 'year'
-
-    feature_scaler = scale_features(train_data, val_data, test_data, features_to_scale)
+    features_scalar = scale_features(train_data, val_data, test_data,features_to_scale)
     target_scaler = scale_targets(train_data, val_data, test_data)
 
-    train_seq, train_tgt = create_sequences(train_data, config['sequence_length'], features_to_scale)
-    val_seq, val_tgt = create_sequences(val_data, config['sequence_length'], features_to_scale)
-    test_seq, test_tgt = create_sequences(test_data, config['sequence_length'], features_to_scale)
+    G = create_graph(dynamic_data, static_data, grid_df)
+    node_mapping = {node: idx for idx, node in enumerate(sorted(G.nodes))}
+    node_to_state = {idx: node for node, idx in node_mapping.items()}
+    node_features_tensor, edge_index_tensor, edge_attr_tensor = extract_graph_features(G, node_mapping)
 
-    # Save processed outputs
-    save_processed_data(
-        config['output_dir'],
-        train_seq=train_seq,
-        train_tgt=train_tgt,
-        val_seq=val_seq,
-        val_tgt=val_tgt,
-        test_seq=test_seq,
-        test_tgt=test_tgt,
-        target_scaler=target_scaler
-    )
+    train_seq, train_tgt, train_nodes = create_sequences(train_data, config['sequence_length'], features_to_scale, node_mapping)
+    val_seq, val_tgt, val_nodes = create_sequences(val_data, config['sequence_length'], features_to_scale, node_mapping)
+    test_seq, test_tgt, test_nodes = create_sequences(test_data, config['sequence_length'], features_to_scale, node_mapping)
 
-    return train_seq, train_tgt, val_seq, val_tgt, test_seq, test_tgt, target_scaler
+    return train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state
 

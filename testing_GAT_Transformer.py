@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from scipy.stats import pearsonr
 from torch.utils.data import DataLoader, TensorDataset
-from gcn_lstm_model import GCN_LSTM
-from data_preprocessing_GCN_LSTM import preprocess_data, load_config
+from GAT_Transformer_model import GAT_Transformer
+from data_preprocessing_GAT_Transformer import preprocess_data, load_config
 
 
 # 设置随机种子
@@ -138,28 +138,27 @@ def evaluate_model(model, test_loader, target_scaler, node_to_state, test_time_i
 if __name__ == "__main__":
     # Load configuration and preprocess data
     config = load_config()
-    train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, node_to_state = preprocess_data(config)
+    train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state = preprocess_data(config)
 
     # Extract time indices for test dataset
     test_time_indices = np.arange(len(test_tgt))  # Replace this with actual time indices if available
 
     # Load the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = GCN_LSTM(
+    model = GAT_Transformer(
         node_feature_dim=node_features_tensor.shape[1],
         sequence_feature_dim=test_seq.shape[2],
-        gcn_out_channels=64,
-        lstm_hidden_dim=128,
-        lstm_layers=4,
+        gat_out_channels=64,
+        gat_heads=8,
+        seq_len=config['sequence_length'],
+        edge_dim=edge_attr_tensor.shape[1]
     ).to(device)
 
-    model_path = os.path.join(config['output_dir'], "gcn_lstm_model.pth")
+    model_path = os.path.join(config['output_dir'], "gat_transformer_model.pth")
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     logging.info(f"Loaded model from {model_path}")
 
-    # Move tensors to device
-    test_seq, test_tgt, test_nodes = test_seq.to(device), test_tgt.to(device), test_nodes.to(device)
     node_features_tensor = node_features_tensor.to(device)
     edge_index_tensor = edge_index_tensor.to(device)
     edge_attr_tensor = edge_attr_tensor.to(device)
@@ -167,7 +166,10 @@ if __name__ == "__main__":
     # Prepare DataLoader
     batch_size = 27
     test_dataset = TensorDataset(test_seq, test_tgt, test_nodes)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,
+                              # 启用快速GPU传输
+                              persistent_workers=True  # 保持worker存活
+                              )
 
     # Evaluate the model
     output_dir = config['output_dir']  # Directory to save outputs
