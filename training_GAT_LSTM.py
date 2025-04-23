@@ -9,7 +9,7 @@ from gat_lstm_model import GAT_LSTM
 from data_preprocessing_GAT_LSTM import preprocess_data, load_config
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-# 设置随机种子
+# Set random seed
 seed = 65
 torch.manual_seed(seed)
 if torch.cuda.is_available():
@@ -106,18 +106,20 @@ if __name__ == "__main__":
     # Move tensors to device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_seq, train_tgt, train_nodes = train_seq.to(device), train_tgt.to(device), train_nodes.to(device)
-    val_seq, val_tgt, val_nodes = val_seq.to(device), val_tgt.to(device), val_nodes.to(device)
     node_features_tensor = node_features_tensor.to(device)
     edge_index_tensor = edge_index_tensor.to(device)
     edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
-    batch_size = 27
+    batch_size = 512
     train_dataset = TensorDataset(train_seq, train_tgt, train_nodes)
     val_dataset = TensorDataset(val_seq, val_tgt, val_nodes)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,
+                              persistent_workers=True 
+                              )
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,
+                            persistent_workers=True
+                            )
 
     # Model parameters
     sequence_feature_dim = train_seq.shape[2]

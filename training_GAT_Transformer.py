@@ -9,7 +9,7 @@ from GAT_Transformer_model import GAT_Transformer
 from data_preprocessing_GAT_Transformer import preprocess_data, load_config
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-# 设置随机种子
+# Set random seed
 seed = 65
 torch.manual_seed(seed)
 if torch.cuda.is_available():
@@ -111,14 +111,14 @@ if __name__ == "__main__":
     edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
-    batch_size = 27
+    batch_size = 1024
     train_dataset = TensorDataset(train_seq, train_tgt, train_nodes)
     val_dataset = TensorDataset(val_seq, val_tgt, val_nodes)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,# 启用快速GPU传输
-                              persistent_workers=True  # 保持worker存活
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
+                              persistent_workers=True 
                               )
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,# 启用快速GPU传输
-                            persistent_workers=True  # 保持worker存活
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
+                            persistent_workers=True
                             )
 
     # Model parameters
@@ -126,18 +126,16 @@ if __name__ == "__main__":
     node_feature_dim = node_features_tensor.shape[1]
     gat_out_channels = 64
     gat_heads = 8
-    lstm_hidden_dim = 128
-    lstm_layers = 4
     edge_dim = edge_attr_tensor.shape[1]
-
+    d_model = 256
     # Initialize model
-    model = GAT_Transformer(node_feature_dim, sequence_feature_dim, config['sequence_length'], gat_out_channels, gat_heads, edge_dim).to(device)
+    model = GAT_Transformer(node_feature_dim, sequence_feature_dim, config['sequence_length'], gat_out_channels, gat_heads, edge_dim,d_model).to(device)
 
     # Define optimizer, scheduler, and loss function
-    optimizer = Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-1)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=15,min_lr=1e-7)
+    # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     criterion = torch.nn.MSELoss()
-
     # Train the model
     output_dir = config['output_dir']  # Directory to save outputs
     train_losses, val_losses = train_model(
@@ -148,7 +146,7 @@ if __name__ == "__main__":
         scheduler=scheduler,
         criterion=criterion,
         num_epochs=200,
-        patience=10,
+        patience=20,
         output_dir=output_dir
     )
     save_train_losses_path = os.path.join(output_dir, "GAT_Transformer_train_losses.pkl")

@@ -38,7 +38,7 @@ def load_config():
         'val_start_date': '2020-01-01',
         'val_end_date': '2020-06-30',
         'test_start_date': '2020-07-01',
-        'output_dir': os.path.join(script_dir, 'outputs/GAT_Transformer_Plots')
+        'output_dir': os.path.join(script_dir, 'outputs/GAT_Transformer_Plots_256_16_6_01d')
     }
 
 

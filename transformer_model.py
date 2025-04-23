@@ -6,14 +6,14 @@ import math
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len):
         super().__init__()
-
+        
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-
+        
         pe = torch.zeros(max_len, d_model)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)  # 不参与训练但会保存到模型参数
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
         """
@@ -24,36 +24,48 @@ class PositionalEncoding(nn.Module):
         pe = pe.unsqueeze(0)
         return x + pe
 
-
 class TimeSeriesTransformer(nn.Module):
-    def __init__(self, input_dim, seq_len):
+    def __init__(self, d_model, input_dim, seq_len):
         super().__init__()
 
-        self.d_model = 64
-        self.nhead = 4
-        self.num_layers = 3
+        self.d_model = d_model
+        self.nhead = 16
+        self.num_layers = 6
 
         # 输入编码
-        self.input_proj = nn.Linear(input_dim, self.d_model)
+        self.input_proj = nn.Sequential(
+            nn.Linear(input_dim, self.d_model),
+            
+            # nn.LayerNorm(self.d_model),
+        )
+        
         self.pos_encoder = PositionalEncoding(self.d_model, seq_len)
 
-        # 判断d_model是否合法（能整除注意力头数）
         assert self.d_model % self.nhead == 0, "d_model must be divisible by nhead"
 
         # Transformer编码器
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.d_model,
             nhead=self.nhead,
-            dim_feedforward=4 * self.d_model,
-            activation='gelu',  # 效果通常优于relu
+            dim_feedforward=4*self.d_model,
+            activation='gelu', 
+            # dropout=0.1,
             dropout=0.1,
-            batch_first=True
+            batch_first=True,
+            norm_first=True,
+            # layer_norm_eps=1e-5
         )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, self.num_layers)
 
-        # 时序聚合与输出
         self.temporal_pool = nn.Conv1d(seq_len, 1, kernel_size=1)
-        self.fc = nn.Linear(self.d_model, 1)  # 预测单变量
+        # self.output = nn.Sequential(
+        #     nn.Linear(self.d_model, self.d_model // 2),
+        #     nn.SiLU(),  # 比ReLU更平滑
+        #     nn.LayerNorm(self.d_model // 2),
+        #     nn.Dropout(0.2),
+        #     nn.Linear(self.d_model // 2, 1),
+        # )
+        
 
     def forward(self, x):
         """
@@ -68,4 +80,6 @@ class TimeSeriesTransformer(nn.Module):
         # Transformer处理
         x = self.transformer_encoder(x)  # [batch, seq_len, d_model]
         x = self.temporal_pool(x).squeeze(1)  # [batch, d_model]
-        return self.fc(x)  # [batch, 1]
+        return x
+
+

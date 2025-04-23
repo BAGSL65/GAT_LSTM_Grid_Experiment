@@ -12,7 +12,7 @@ from gat_lstm_model import GAT_LSTM
 from data_preprocessing_GAT_LSTM import preprocess_data, load_config
 
 
-# 设置随机种子
+# Set random seed
 seed = 65
 random.seed(seed)
 np.random.seed(seed)

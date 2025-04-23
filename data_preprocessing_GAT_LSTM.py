@@ -41,25 +41,6 @@ def load_config():
         'output_dir': os.path.join(script_dir, 'outputs/GAT_LSTM_Plots')
     }
 
-
-def save_processed_data(output_dir, **data):
-    """Save processed data to files."""
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Save tensors
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            file_path = os.path.join(output_dir, f"{key}.pt")
-            torch.save(value, file_path)
-            print(f"Saved {key} to {file_path}")
-        elif isinstance(value, RobustScaler):
-            file_path = os.path.join(output_dir, f"{key}.pkl")
-            with open(file_path, 'wb') as f:
-                import pickle
-                pickle.dump(value, f)
-            print(f"Saved {key} to {file_path}")
-
-
 def load_and_prepare_data(config):
     """Load and prepare datasets."""
     dynamic_data = pd.read_csv(config['dynamic_data_path'])
@@ -245,24 +226,6 @@ def preprocess_data(config):
 
     # Visualize and save the graph
     visualize_graph(G, config['output_dir'])
-
-    # Save processed outputs
-    save_processed_data(
-        config['output_dir'],
-        train_seq=train_seq,
-        train_tgt=train_tgt,
-        train_nodes=train_nodes,
-        val_seq=val_seq,
-        val_tgt=val_tgt,
-        val_nodes=val_nodes,
-        test_seq=test_seq,
-        test_tgt=test_tgt,
-        test_nodes=test_nodes,
-        node_features_tensor=node_features_tensor,
-        edge_index_tensor=edge_index_tensor,
-        edge_attr_tensor=edge_attr_tensor,
-        target_scaler=target_scaler
-    )
 
     return train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state
 

@@ -12,7 +12,7 @@ from GAT_Transformer_model import GAT_Transformer
 from data_preprocessing_GAT_Transformer import preprocess_data, load_config
 
 
-# 设置随机种子
+# Set random seed
 seed = 65
 random.seed(seed)
 np.random.seed(seed)
@@ -70,6 +70,7 @@ def evaluate_model(model, test_loader, target_scaler, node_to_state, test_time_i
     mae = mean_absolute_error(test_targets, test_predictions)
     rmse = np.sqrt(mean_squared_error(test_targets, test_predictions))
     smape = np.mean(2 * np.abs(test_targets - test_predictions) / (np.abs(test_targets) + np.abs(test_predictions))) * 100
+    mae = np.mean(np.abs(test_targets - test_predictions))
     r2 = r2_score(test_targets, test_predictions)
     corr_coef, _ = pearsonr(test_targets, test_predictions)
 
@@ -120,7 +121,6 @@ def evaluate_model(model, test_loader, target_scaler, node_to_state, test_time_i
         plt.plot(predicted, label='Predicted')
 
         node_name = node_to_state.get(node, f"Node {node}")  # Use the actual node name
-        logging.info(f"{node_name}")
         plt.title(f"Actual vs Predicted - {node_name}")
         plt.xlabel('Hour')
         plt.ylabel('Load')
@@ -139,7 +139,6 @@ if __name__ == "__main__":
     # Load configuration and preprocess data
     config = load_config()
     train_seq, train_tgt, train_nodes, val_seq, val_tgt, val_nodes, test_seq, test_tgt, test_nodes, node_features_tensor, edge_index_tensor, edge_attr_tensor, target_scaler,node_to_state = preprocess_data(config)
-
     # Extract time indices for test dataset
     test_time_indices = np.arange(len(test_tgt))  # Replace this with actual time indices if available
 
@@ -148,13 +147,15 @@ if __name__ == "__main__":
     model = GAT_Transformer(
         node_feature_dim=node_features_tensor.shape[1],
         sequence_feature_dim=test_seq.shape[2],
+        seq_len=config['sequence_length'],
         gat_out_channels=64,
         gat_heads=8,
-        seq_len=config['sequence_length'],
-        edge_dim=edge_attr_tensor.shape[1]
+        edge_dim=edge_attr_tensor.shape[1],
+        d_model=256
     ).to(device)
 
     model_path = os.path.join(config['output_dir'], "gat_transformer_model.pth")
+    # model_path = "gat_transformer_model.pth"
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     logging.info(f"Loaded model from {model_path}")
@@ -164,13 +165,11 @@ if __name__ == "__main__":
     edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
-    batch_size = 27
+    batch_size = 1024
     test_dataset = TensorDataset(test_seq, test_tgt, test_nodes)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,
-                              # 启用快速GPU传输
-                              persistent_workers=True  # 保持worker存活
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
+                              persistent_workers=True 
                               )
-
     # Evaluate the model
     output_dir = config['output_dir']  # Directory to save outputs
     test_targets, test_predictions, mae, rmse, mape, r2, corr_coef = evaluate_model(
