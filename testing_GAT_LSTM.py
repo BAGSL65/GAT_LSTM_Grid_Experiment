@@ -120,7 +120,6 @@ def evaluate_model(model, test_loader, target_scaler, node_to_state, test_time_i
         plt.plot(predicted, label='Predicted')
 
         node_name = node_to_state.get(node, f"Node {node}")  # Use the actual node name
-        logging.info(f"{node_name}")
         plt.title(f"Actual vs Predicted - {node_name}")
         plt.xlabel('Hour')
         plt.ylabel('Load')
@@ -167,7 +166,7 @@ if __name__ == "__main__":
     edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
-    batch_size = 27
+    batch_size = 1024
     test_dataset = TensorDataset(test_seq, test_tgt, test_nodes)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 

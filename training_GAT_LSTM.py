@@ -111,7 +111,7 @@ if __name__ == "__main__":
     edge_attr_tensor = edge_attr_tensor.to(device)
 
     # Prepare DataLoader
-    batch_size = 512
+    batch_size = 1024
     train_dataset = TensorDataset(train_seq, train_tgt, train_nodes)
     val_dataset = TensorDataset(val_seq, val_tgt, val_nodes)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=6, pin_memory=True,
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     model = GAT_LSTM(node_feature_dim, sequence_feature_dim, gat_out_channels, gat_heads, lstm_hidden_dim, lstm_layers, edge_dim).to(device)
 
     # Define optimizer, scheduler, and loss function
-    optimizer = Adam(model.parameters(), lr=0.0001, weight_decay=1e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=1e-1)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
     criterion = torch.nn.MSELoss()
 

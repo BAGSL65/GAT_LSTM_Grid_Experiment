@@ -110,7 +110,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Prepare DataLoader
-    batch_size = 256
+    batch_size = 1024
     train_dataset = TensorDataset(train_seq, train_tgt)
     val_dataset = TensorDataset(val_seq, val_tgt)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True,
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     model = TimeSeriesTransformer(d_model, sequence_feature_dim, config['sequence_length']).to(device)
 
     # Define optimizer, scheduler, and loss function
-    optimizer = Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-1)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
     criterion = torch.nn.MSELoss()
 

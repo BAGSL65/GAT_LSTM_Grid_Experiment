@@ -30,14 +30,14 @@ class GAT_Transformer(nn.Module):
         self.gat_dropout = nn.Dropout(0.2)
 
         # self.SpatioTemporalFusion = SpatioTemporalFusion(2*gat_out_channels, sequence_feature_dim,seq_len)
-        self.fusion = nn.Sequential(
-            nn.Linear(2*gat_out_channels + sequence_feature_dim, d_model),
-            # nn.LayerNorm(d_model),
-            # nn.Dropout(0.2),
-            
-        )
+        # self.fusion = nn.Sequential(
+        #     nn.Linear(2*gat_out_channels + sequence_feature_dim, d_model),
+        #     # nn.LayerNorm(d_model),
+        #     # nn.Dropout(0.2),
+        #
+        # )
         
-        self.transformer = TimeSeriesTransformer(d_model, d_model, seq_len)
+        self.transformer = TimeSeriesTransformer(d_model, 2*gat_out_channels + sequence_feature_dim, seq_len)
         # self.transformer = TimeSeriesTransformer(d_model, 2*sequence_feature_dim, seq_len)
         self.output = nn.Sequential(
             # nn.Linear(d_model, d_model//2),
@@ -73,11 +73,14 @@ class GAT_Transformer(nn.Module):
         # combined_input = torch.cat((sequences, gat_combined_out), dim=-1)  # [batch_size, seq_len, seq_feat_dim + 2 * gat_out_channels]
         
         # combined_input = self.SpatioTemporalFusion(gat_combined_out,sequences)
-        combined_input = self.fusion(torch.cat([
-            gat_combined_out, 
+        # combined_input = self.fusion(torch.cat([
+        #     gat_combined_out,
+        #     sequences
+        # ], dim=-1))
+        combined_input = torch.cat([
+            gat_combined_out,
             sequences
-        ], dim=-1))
-        
+        ], dim=-1)
         # Transformer处理
         output = self.transformer(combined_input)
         return self.output(output)

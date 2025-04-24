@@ -83,9 +83,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Model parameters
     sequence_feature_dim = train_seq.shape[2]
-    output_dim = 1
-
-    model = TimeSeriesTransformer(sequence_feature_dim, output_dim).to(device)
+    d_model = 256
+    model = TimeSeriesTransformer(d_model, sequence_feature_dim, config['sequence_length']).to(device)
 
     model_path = os.path.join(config['output_dir'], "transformer_model.pth")
     model.load_state_dict(torch.load(model_path, weights_only=True))
@@ -96,7 +95,7 @@ if __name__ == "__main__":
     test_seq, test_tgt = test_seq.to(device), test_tgt.to(device)
 
     # Prepare DataLoader
-    batch_size = 27
+    batch_size = 1024
     test_dataset = TensorDataset(test_seq, test_tgt)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
